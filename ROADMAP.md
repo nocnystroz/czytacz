@@ -55,6 +55,8 @@ This document outlines the development plan for the `Speaker` tool.
     - [x] Translated all user-facing strings, comments, and documentation to English.
     - [x] Updated installer scripts (`install.sh`, `uninstall.sh`) for new command name and robustness.
     - [x] Updated `.env.example` placeholders.
+    - [x] Conditional confirmation for non-root install/uninstall: Installer scripts now prompt for confirmation if not run as root, explaining manual sudo steps required for system-level components.
+    - [x] Conditional `mpg123` removal in `uninstall.sh`: The uninstallation script now conditionally offers to remove the 'mpg123' package if run with root privileges, improving cleanup completeness.
 - [x] **Add GPLv3 LICENSE file**:
     - [x] Researched component licenses (MIT, Apache 2.0, BSD 3-Clause, LGPLv2.1) and Jina AI API terms for GPLv3 compatibility.
     - [x] Added the full text of the GNU General Public License v3 to the `LICENSE` file.

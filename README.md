@@ -23,13 +23,20 @@ chmod +x installator/install.sh
 
 # Run the installer from the main repository directory
 bash installator/install.sh
+# or, to allow automatic handling of system dependencies and man page:
+sudo bash installator/install.sh
 ```
 
+**Installer Behavior:**
+*   If run with `sudo`, it will automatically handle system-level dependencies (`mpg123`) and install the man page.
+*   If run without `sudo`, it will prompt you. If you proceed, it will install user-level components, but `mpg123` installation and man page setup will either require manual `sudo` input during the process or manual steps afterwards.
+
 The script will automatically:
-1.  Detect your package manager and install `mpg123`.
+1.  Detect your package manager and install `mpg123` (or prompt for `sudo` if not run as `sudo`).
 2.  Create the `~/.local/share/speaker` directory and copy the application files there.
 3.  Create a Python virtual environment and install dependencies from `requirements.txt`.
 4.  Add the `speak` command to your shell (`.bashrc` or `.zshrc`).
+5.  Install the man page (`speak.1.gz`) (or provide manual instructions if not run as `sudo`).
 
 After the installation is complete, restart your terminal or refresh the session with `source ~/.bashrc` (or `source ~/.zshrc`).
 
@@ -49,6 +56,8 @@ speak -s This is a very long text that we want to summarize...
 ## Man Page Installation (`man speak`)
 
 To use the system help `man speak`, you need to install the included man page file. The `speak.1.gz` file is located in this repository.
+
+*Note: The `install.sh` script can handle this automatically if run with `sudo`.*
 
 1.  **Copy the `speak.1.gz` file to the system directory:**
     ```bash
@@ -91,7 +100,13 @@ chmod +x installator/uninstall.sh
 
 # Run the uninstaller
 bash installator/uninstall.sh
+# or, to allow automatic handling of system-level cleanup (man page, mpg123):
+sudo bash installator/uninstall.sh
 ```
+
+**Uninstaller Behavior:**
+*   If run with `sudo`, it will automatically remove the man page. It will also *ask you* if you wish to remove `mpg123`.
+*   If run without `sudo`, it will prompt you. If you proceed, it will remove user-level components, but man page removal and `mpg123` removal will require manual `sudo` steps.
 
 The script will ask for confirmation, then automatically remove the `speak` function from your shell configuration and delete the entire `~/.local/share/speaker` application directory.
 
@@ -111,7 +126,18 @@ sed -i '/# --- Function for the Speaker tool ---/,/}/d' ~/.zshrc
 rm -rf ~/.local/share/speaker
 ```
 
-#### 3. Refresh the terminal
+#### 3. Remove Man Page (if installed)
+```bash
+sudo rm /usr/local/share/man/man1/speak.1.gz
+sudo mandb
+```
+
+#### 4. Remove mpg123 (if installed and desired)
+```bash
+sudo apt-get remove mpg123 # or use your package manager (dnf, yum, pacman, etc.)
+```
+
+#### 5. Refresh the terminal
 ```bash
 source ~/.bashrc 
 # or
