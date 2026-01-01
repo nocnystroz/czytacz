@@ -38,12 +38,16 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# MCP Server
+# MCP Server & Claude Code
 .serena/
+.claude/
 
 # Backup files (created by installer scripts)
 *.bak
 *.bak.*
+*.backup.*
+.bashrc.backup.*
+.zshrc.backup.*
 
 # Temporary audio files (in case cleanup fails)
 *.mp3
@@ -51,3 +55,14 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Speaker-specific cache files (per-TTY LLM cache)
+speaker_llm_*
+
+# Python wheels
+*.whl
+
+# Test files
+test_*.py
+*_test.py
+tests/output/

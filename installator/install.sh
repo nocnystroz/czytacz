@@ -96,59 +96,153 @@ printf "\\n${YELLOW}Step 1: Checking system dependencies (mpg123)...${NC}\\n"
 if command -v mpg123 &> /dev/null; then
     echo "mpg123 is already installed."
 else
-    echo "mpg13 not found."
-    # Ask before attempting to install system dependency with sudo when not running as root
-    if [ "$RUN_AS_ROOT" = true ]; then
-        INSTALL_MPG123_NOW=true
-    else
-        INSTALL_MPG123_NOW=false
-        if command -v sudo &> /dev/null; then
-            read -r -p "Install mpg123 now using sudo (this will run package manager commands)? (y/N) " REPLY_MPG
-            echo
-            if [[ "$REPLY_MPG" =~ ^[Yy]$ ]]; then
-                INSTALL_MPG123_NOW=true
-            fi
+    echo "mpg123 not found."
+    # Always ask before installing system dependencies (even as root)
+    INSTALL_MPG123_NOW=false
+    if command -v sudo &> /dev/null || [ "$RUN_AS_ROOT" = true ]; then
+        if [ "$RUN_AS_ROOT" = true ]; then
+            read -r -p "Install mpg123 now as root (this will run package manager commands)? (Y/n) " REPLY_MPG
         else
-            echo "sudo not available: skipping automatic installation of mpg123. Please install manually if needed."
+            read -r -p "Install mpg123 now using sudo (this will run package manager commands)? (Y/n) " REPLY_MPG
         fi
+        echo
+        # Default is Yes - only skip if user explicitly says No
+        if [[ ! "$REPLY_MPG" =~ ^[Nn]$ ]]; then
+            INSTALL_MPG123_NOW=true
+        fi
+    else
+        printf "${YELLOW}sudo not available and not running as root: cannot install mpg123 automatically.${NC}\\n" >&2
+        printf "${YELLOW}Please install mpg123 manually using your system's package manager.${NC}\\n" >&2
     fi
 
     # Determine package manager and install mpg123
     PACKAGE_MANAGER_INSTALL_CMD=""
+    MPG123_INSTALL_SUCCESS=false
     if [ "$INSTALL_MPG123_NOW" = true ]; then
+        echo "Installing mpg123..."
+        # Temporarily disable exit-on-error for package installation
+        set +e
+
         if command -v apt-get &> /dev/null; then
             if [ "$RUN_AS_ROOT" = true ]; then
-                apt-get update && apt-get install -y mpg123
+                UPDATE_OUTPUT=$(apt-get update 2>&1)
+                UPDATE_EXIT_CODE=$?
             else
-                sudo apt-get update && sudo apt-get install -y mpg123
+                echo "This will require your sudo password:"
+                UPDATE_OUTPUT=$(sudo apt-get update 2>&1)
+                UPDATE_EXIT_CODE=$?
             fi
+
+            # Check if update failed and inform user about potential issues
+            if [ $UPDATE_EXIT_CODE -ne 0 ]; then
+                printf "${YELLOW}⚠ Warning: apt-get update reported errors.${NC}\\n" >&2
+
+                # Check for common issues and provide helpful messages
+                if echo "$UPDATE_OUTPUT" | grep -q "does not have a Release file"; then
+                    printf "${YELLOW}  Issue detected: One or more repositories are broken or unavailable.${NC}\\n" >&2
+
+                    # Extract broken PPA names
+                    BROKEN_REPOS=$(echo "$UPDATE_OUTPUT" | grep "does not have a Release file" | sed -n "s/.*'\(https\?:\/\/[^']*\)'.*/\1/p")
+                    if [ -n "$BROKEN_REPOS" ]; then
+                        printf "${YELLOW}  Broken repositories found:${NC}\\n" >&2
+                        echo "$BROKEN_REPOS" | while read -r repo; do
+                            printf "${YELLOW}    - $repo${NC}\\n" >&2
+                            # Try to identify PPA name
+                            if echo "$repo" | grep -q "ppa.launchpadcontent.net"; then
+                                PPA_NAME=$(echo "$repo" | sed -n 's|.*ppa.launchpadcontent.net/\([^/]*/[^/]*\)/.*|\1|p')
+                                if [ -n "$PPA_NAME" ]; then
+                                    printf "${YELLOW}      Fix with: sudo add-apt-repository --remove ppa:$PPA_NAME -y${NC}\\n" >&2
+                                fi
+                            fi
+                        done
+                    fi
+                elif echo "$UPDATE_OUTPUT" | grep -q "Could not resolve"; then
+                    printf "${YELLOW}  Issue detected: Network connectivity problems or DNS resolution failure.${NC}\\n" >&2
+                    printf "${YELLOW}  Check your internet connection and try again.${NC}\\n" >&2
+                fi
+
+                printf "${YELLOW}  Continuing with installation anyway...${NC}\\n" >&2
+            fi
+
+            # Try to install mpg123 regardless of update errors
+            if [ "$RUN_AS_ROOT" = true ]; then
+                apt-get install -y mpg123
+            else
+                sudo apt-get install -y mpg123
+            fi
+
+            # Check if mpg123 is now available (better test than $?)
+            command -v mpg123 &> /dev/null && MPG123_INSTALL_SUCCESS=true
             PACKAGE_MANAGER_INSTALL_CMD="apt-get install -y"
         elif command -v dnf &> /dev/null; then
             if [ "$RUN_AS_ROOT" = true ]; then
-                dnf install -y mpg123
+                INSTALL_OUTPUT=$(dnf install -y mpg123 2>&1)
+                INSTALL_EXIT_CODE=$?
             else
-                sudo dnf install -y mpg123
+                echo "This will require your sudo password:"
+                INSTALL_OUTPUT=$(sudo dnf install -y mpg123 2>&1)
+                INSTALL_EXIT_CODE=$?
             fi
+
+            if [ $INSTALL_EXIT_CODE -ne 0 ]; then
+                printf "${YELLOW}⚠ Warning: dnf install reported errors:${NC}\\n" >&2
+                echo "$INSTALL_OUTPUT" | tail -5 >&2
+            fi
+
+            command -v mpg123 &> /dev/null && MPG123_INSTALL_SUCCESS=true
             PACKAGE_MANAGER_INSTALL_CMD="dnf install -y"
         elif command -v yum &> /dev/null; then
             if [ "$RUN_AS_ROOT" = true ]; then
-                yum install -y mpg123
+                INSTALL_OUTPUT=$(yum install -y mpg123 2>&1)
+                INSTALL_EXIT_CODE=$?
             else
-                sudo yum install -y mpg123
+                echo "This will require your sudo password:"
+                INSTALL_OUTPUT=$(sudo yum install -y mpg123 2>&1)
+                INSTALL_EXIT_CODE=$?
             fi
+
+            if [ $INSTALL_EXIT_CODE -ne 0 ]; then
+                printf "${YELLOW}⚠ Warning: yum install reported errors:${NC}\\n" >&2
+                echo "$INSTALL_OUTPUT" | tail -5 >&2
+            fi
+
+            command -v mpg123 &> /dev/null && MPG123_INSTALL_SUCCESS=true
             PACKAGE_MANAGER_INSTALL_CMD="yum install -y"
         elif command -v pacman &> /dev/null; then
             if [ "$RUN_AS_ROOT" = true ]; then
-            pacman -S --noconfirm mpg123
+                INSTALL_OUTPUT=$(pacman -S --noconfirm mpg123 2>&1)
+                INSTALL_EXIT_CODE=$?
+            else
+                echo "This will require your sudo password:"
+                INSTALL_OUTPUT=$(sudo pacman -S --noconfirm mpg123 2>&1)
+                INSTALL_EXIT_CODE=$?
+            fi
+
+            if [ $INSTALL_EXIT_CODE -ne 0 ]; then
+                printf "${YELLOW}⚠ Warning: pacman install reported errors:${NC}\\n" >&2
+                echo "$INSTALL_OUTPUT" | tail -5 >&2
+            fi
+
+            command -v mpg123 &> /dev/null && MPG123_INSTALL_SUCCESS=true
+            PACKAGE_MANAGER_INSTALL_CMD="pacman -S --noconfirm"
         else
-            sudo pacman -S --noconfirm mpg123
+            printf "${YELLOW}Could not detect a supported package manager (apt-get, dnf, yum, pacman).${NC}\\n" >&2
+            printf "${YELLOW}Please install mpg123 manually using your system's package manager.${NC}\\n" >&2
         fi
-        PACKAGE_MANAGER_INSTALL_CMD="pacman -S --noconfirm"
+
+        # Re-enable exit-on-error
+        set -e
+
+        if [ "$MPG123_INSTALL_SUCCESS" = true ]; then
+            echo "✓ mpg123 has been successfully installed."
+        else
+            printf "${YELLOW}✗ WARNING: mpg123 installation failed. Audio playback will not work.${NC}\\n" >&2
+            printf "${YELLOW}  To install it later, run: sudo apt-get install mpg123 (or equivalent)${NC}\\n" >&2
+        fi
     else
-        printf "${YELLOW}Could not automatically install mpg123. Please install it manually.${NC}\\n" >&2
-        exit 1
+        printf "${YELLOW}WARNING: mpg123 was not installed. Audio playback will not work.${NC}\\n" >&2
+        printf "${YELLOW}To install it later, run: sudo apt-get install mpg123 (or equivalent for your system)${NC}\\n" >&2
     fi
-    echo "mpg123 has been successfully installed."
 fi
 
 # --- Step 2: Create directory structure and copy files ---
@@ -233,9 +327,16 @@ EOF
 BASHRC_PATH="$INSTALL_HOME/.bashrc"
 if [ -f "$BASHRC_PATH" ]; then
     if ! grep -q "# --- Function for the Speaker tool ---" "$BASHRC_PATH"; then
-        # Append the function as the target user to preserve ownership
-        run_as_user "printf '\n%s\n' \"$SPEAK_FUNCTION\" >> \"$BASHRC_PATH\""
-        echo "Added 'speak' function to $BASHRC_PATH"
+        # Append the function directly (avoiding variable expansion issues with run_as_user)
+        if [ "$EUID" -eq 0 ] && [ -n "$INSTALL_USER" ] && [ "$INSTALL_USER" != "root" ]; then
+            # When running as root, write as target user but use tee to avoid expansion issues
+            echo "$SPEAK_FUNCTION" | sudo -u "$INSTALL_USER" tee -a "$BASHRC_PATH" > /dev/null
+            echo "Added 'speak' function to $BASHRC_PATH"
+        else
+            # When not root, append directly
+            echo "$SPEAK_FUNCTION" >> "$BASHRC_PATH"
+            echo "Added 'speak' function to $BASHRC_PATH"
+        fi
     else
         echo "'speak' function already exists in $BASHRC_PATH. Skipping."
     fi
@@ -245,39 +346,68 @@ fi
 ZSHRC_PATH="$INSTALL_HOME/.zshrc"
 if [ -f "$ZSHRC_PATH" ]; then
     if ! grep -q "# --- Function for the Speaker tool ---" "$ZSHRC_PATH"; then
-        run_as_user "printf '\n%s\n' \"$SPEAK_FUNCTION\" >> \"$ZSHRC_PATH\""
-        echo "Added 'speak' function to $ZSHRC_PATH"
+        # Append the function directly (avoiding variable expansion issues with run_as_user)
+        if [ "$EUID" -eq 0 ] && [ -n "$INSTALL_USER" ] && [ "$INSTALL_USER" != "root" ]; then
+            # When running as root, write as target user but use tee to avoid expansion issues
+            echo "$SPEAK_FUNCTION" | sudo -u "$INSTALL_USER" tee -a "$ZSHRC_PATH" > /dev/null
+            echo "Added 'speak' function to $ZSHRC_PATH"
+        else
+            # When not root, append directly
+            echo "$SPEAK_FUNCTION" >> "$ZSHRC_PATH"
+            echo "Added 'speak' function to $ZSHRC_PATH"
+        fi
     else
         echo "'speak' function already exists in $ZSHRC_PATH. Skipping."
     fi
 fi
 
-# --- Step 5: Install Man Page (conditional on root privileges) ---
+# --- Step 5: Install Man Page (always ask, even as root) ---
 printf "\\n${YELLOW}Step 5: Installing Man Page...${NC}\\n"
-if [ "$RUN_AS_ROOT" = true ]; then
-    cp "$REPO_DIR/speak.1.gz" "/usr/local/share/man/man1/"
-    mandb
-    echo "Man page for 'speak' installed."
-else
-    # Offer to install the man page using sudo and run mandb, when the installer itself
-    # was run without root but sudo is available.
-    if command -v sudo &> /dev/null; then
-        read -r -p "Install man page system-wide now using sudo (will run 'sudo mandb')? (y/N) " REPLY_MAN
-        echo
-        if [[ "$REPLY_MAN" =~ ^[Yy]$ ]]; then
-            sudo cp "$REPO_DIR/speak.1.gz" "/usr/local/share/man/man1/"
-            sudo mandb
-            echo "Man page for 'speak' installed system-wide."
-        else
-            echo "Man page installation skipped. To install manually run:"
-            printf "${YELLOW}sudo cp $REPO_DIR/speak.1.gz /usr/local/share/man/man1/\n${NC}"
-            printf "${YELLOW}sudo mandb\n${NC}"
-        fi
+INSTALL_MAN_NOW=false
+if command -v sudo &> /dev/null || [ "$RUN_AS_ROOT" = true ]; then
+    if [ "$RUN_AS_ROOT" = true ]; then
+        read -r -p "Install man page system-wide now as root (will run 'mandb')? (Y/n) " REPLY_MAN
     else
-        echo "Man page installation requires root privileges to install to system directories. Please install it manually if desired:"
-        printf "${YELLOW}sudo cp $REPO_DIR/speak.1.gz /usr/local/share/man/man1/\n${NC}"
-        printf "${YELLOW}sudo mandb\n${NC}"
+        read -r -p "Install man page system-wide now using sudo (will run 'sudo mandb')? (Y/n) " REPLY_MAN
     fi
+    echo
+    # Default is Yes - only skip if user explicitly says No
+    if [[ ! "$REPLY_MAN" =~ ^[Nn]$ ]]; then
+        INSTALL_MAN_NOW=true
+    fi
+else
+    printf "${YELLOW}sudo not available and not running as root: cannot install man page automatically.${NC}\\n" >&2
+    printf "${YELLOW}Please install it manually if desired.${NC}\\n" >&2
+fi
+
+if [ "$INSTALL_MAN_NOW" = true ]; then
+    echo "Installing man page..."
+    # Temporarily disable exit-on-error for man page installation
+    set +e
+    MAN_INSTALL_SUCCESS=false
+
+    if [ "$RUN_AS_ROOT" = true ]; then
+        cp "$REPO_DIR/speak.1.gz" "/usr/local/share/man/man1/" && mandb
+        [ $? -eq 0 ] && MAN_INSTALL_SUCCESS=true
+    else
+        echo "This will require your sudo password:"
+        sudo cp "$REPO_DIR/speak.1.gz" "/usr/local/share/man/man1/" && sudo mandb
+        [ $? -eq 0 ] && MAN_INSTALL_SUCCESS=true
+    fi
+
+    # Re-enable exit-on-error
+    set -e
+
+    if [ "$MAN_INSTALL_SUCCESS" = true ]; then
+        echo "✓ Man page for 'speak' installed successfully."
+    else
+        printf "${YELLOW}✗ WARNING: Man page installation failed.${NC}\\n" >&2
+        printf "${YELLOW}  To install manually, run the commands shown below.${NC}\\n" >&2
+    fi
+else
+    echo "Man page installation skipped. To install manually run:"
+    printf "${YELLOW}sudo cp $REPO_DIR/speak.1.gz /usr/local/share/man/man1/\n${NC}"
+    printf "${YELLOW}sudo mandb\n${NC}"
 fi
 
 # --- Completion ---
