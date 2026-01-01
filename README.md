@@ -25,14 +25,14 @@ Instalacja jest obsługiwana przez skrypt/agenta. Jeśli czytasz ten plik, narz�
 ## Użycie
 
 ```bash
-# Czytanie prostego tekstu
-czytaj "To jest przykładowy tekst do przeczytania."
+# Czytanie prostego tekstu (cudzysłowy nie są już wymagane)
+czytaj To jest przykładowy tekst do przeczytania.
 
 # Czytanie treści strony internetowej
 czytaj https://example.com
 
-# Streszczenie i przeczytanie treści strony
-czytaj --summarize https://długi-artykuł.com
+# Streszczenie i przeczytanie długiego tekstu
+czytaj -s To jest bardzo długi tekst, który chcemy streścić...
 ```
 
 ## Instalacja Strony Podręcznika (`man czytaj`)

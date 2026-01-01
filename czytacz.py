@@ -215,20 +215,24 @@ def main():
         description="Czyta na głos podany tekst lub treść strony internetowej, z opcją streszczenia."
     )
     parser.add_argument(
-        "text_or_url",
-        type=str,
-        help="Tekst do przeczytania lub adres URL strony.",
-    )
-    parser.add_argument(
         "-s", "--summarize",
         action="store_true",
         help="Aktywuje streszczanie tekstu przed przeczytaniem przy użyciu LLM.",
     )
+    parser.add_argument(
+        "text_parts",
+        nargs='+',
+        type=str,
+        help="Tekst do przeczytania lub adres URL. Wszystkie słowa zostaną połączone w jeden ciąg.",
+    )
     args = parser.parse_args()
 
-    content_to_process = args.text_or_url
+    # Łączenie wszystkich części tekstu w jeden ciąg
+    content_to_process = " ".join(args.text_parts)
     
-    if is_url(content_to_process):
+    # Sprawdzenie czy połączony tekst jest pojedynczym URL-em
+    # len(args.text_parts) == 1 zapobiega próbie traktowania "https://onet.pl i coś jeszcze" jako URL
+    if len(args.text_parts) == 1 and is_url(content_to_process):
         content_for_reading = get_content_from_url(content_to_process)
     else:
         content_for_reading = content_to_process
