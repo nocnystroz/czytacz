@@ -65,6 +65,12 @@ After these steps, the `man speak` command should work correctly.
 
 ---
 
+## License
+
+This project is licensed under the **GNU General Public License v3 (GPLv3)**. See the `LICENSE` file for full details.
+
+---
+
 ## Uninstallation
 
 The recommended uninstallation method is to use the `uninstall.sh` script.

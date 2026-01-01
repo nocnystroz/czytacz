@@ -47,7 +47,19 @@ This document outlines the development plan for the `Speaker` tool.
 - [x] **Dependency Management**:
     - [x] Created a `requirements.txt` file for cleaner Python dependency installation.
 
-## Future Ideas (v0.5 and beyond)
+## Done (v0.5)
+
+- [x] **Command Rename & Internationalization**:
+    - [x] Renamed 'czytaj' command to 'speak'.
+    - [x] Renamed `czytacz.py` to `speaker.py`.
+    - [x] Translated all user-facing strings, comments, and documentation to English.
+    - [x] Updated installer scripts (`install.sh`, `uninstall.sh`) for new command name and robustness.
+    - [x] Updated `.env.example` placeholders.
+- [x] **Add GPLv3 LICENSE file**:
+    - [x] Researched component licenses (MIT, Apache 2.0, BSD 3-Clause, LGPLv2.1) and Jina AI API terms for GPLv3 compatibility.
+    - [x] Added the full text of the GNU General Public License v3 to the `LICENSE` file.
+
+## Future Ideas (v0.6 and beyond)
 
 - [ ] **Support for multiple TTS engines**:
     - Allow choosing different text-to-speech services (e.g., ElevenLabs, or other local ones).
