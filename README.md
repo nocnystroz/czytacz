@@ -14,13 +14,23 @@ Dodatkowo, posiada opcjonalną funkcję streszczania długich tekstów przy uży
 
 ## Instalacja
 
-Instalacja jest obsługiwana przez skrypt/agenta. Jeśli czytasz ten plik, narzędzie jest prawdopodobnie już zainstalowane. Główne kroki instalacji to:
+Główną i zalecaną metodą instalacji jest użycie dołączonego skryptu `install.sh`.
 
-1. Stworzenie dedykowanego katalogu w `~/.local/share/czytacz`.
-2. Utworzenie wirtualnego środowiska Python (`venv`) i instalacja zależności (`gTTS`, `requests`, `python-dotenv`).
-3. Instalacja systemowego odtwarzacza `mpg123`.
-4. Dodanie funkcji `czytaj` do pliku `~/.bashrc`.
-5. Stworzenie pliku konfiguracyjnego `.env` na podstawie szablonu `.env.example` w katalogu `~/.local/share/czytacz/` w celu zdefiniowania kluczy API, kolejności modeli LLM (`LLM_FALLBACK_ORDER`) oraz kolejności silników TTS (`TTS_FALLBACK_ORDER`).
+```bash
+# Upewnij się, że skrypt ma uprawnienia do wykonania
+chmod +x installator/install.sh
+
+# Uruchom instalator z głównego katalogu repozytorium
+bash installator/install.sh
+```
+
+Skrypt automatycznie:
+1.  Wykryje menedżera pakietów i zainstaluje `mpg123`.
+2.  Stworzy katalog `~/.local/share/czytacz` i skopiuje tam pliki aplikacji.
+3.  Stworzy wirtualne środowisko Python i zainstaluje zależności z `requirements.txt`.
+4.  Doda polecenie `czytaj` do Twojej powłoki (`.bashrc` lub `.zshrc`).
+
+Po zakończeniu instalacji, uruchom ponownie terminal lub odśwież sesję poleceniem `source ~/.bashrc` (lub `source ~/.zshrc`).
 
 ## Użycie
 
@@ -56,43 +66,37 @@ Po wykonaniu tych kroków polecenie `man czytaj` powinno działać poprawnie.
 
 ## Deinstalacja (Jak całkowicie usunąć narzędzie)
 
-Aby całkowicie usunąć `Czytacza` i wszystkie jego komponenty z systemu, wykonaj poniższe kroki.
-
-### 1. Usunięcie funkcji z `.bashrc`
-
-Otwórz plik `~/.bashrc` w edytorze tekstu (np. `nano ~/.bashrc` lub `gedit ~/.bashrc`) i usuń cały poniższy fragment:
+Zalecaną metodą deinstalacji jest użycie skryptu `uninstall.sh`.
 
 ```bash
-# Function to read text or URL content aloud
-function czytaj() {
-    # ... cała zawartość tej funkcji ...
-}
+# Upewnij się, że skrypt ma uprawnienia do wykonania
+chmod +x installator/uninstall.sh
+
+# Uruchom deinstalator
+bash installator/uninstall.sh
 ```
 
-**Alternatywnie**, możesz użyć poniższej komendy, która automatycznie usunie ten blok za pomocą `sed`. Jest to szybsze, ale upewnij się, że masz kopię zapasową `~/.bashrc`, jeśli coś pójdzie nie tak.
+Skrypt poprosi o potwierdzenie, a następnie automatycznie usunie funkcję `czytaj` z konfiguracji powłoki oraz skasuje cały katalog aplikacji `~/.local/share/czytacz`.
 
+### Ręczna deinstalacja
+
+Jeśli z jakiegoś powodu wolisz usunąć narzędzie ręcznie, poniżej znajdują się kroki, które wykonuje skrypt:
+
+#### 1. Usunięcie funkcji z `.bashrc` / `.zshrc`
+Użyj poniższej komendy, aby automatycznie usunąć blok funkcji `czytaj` (zalecane utworzenie kopii zapasowej `cp ~/.bashrc ~/.bashrc.bak`).
 ```bash
-# Utwórz kopię zapasową
-cp ~/.bashrc ~/.bashrc.bak
-
-# Usuń funkcję 'czytaj'
-sed -i '/# Function to read text or URL content aloud/,/}/d' ~/.bashrc
+sed -i '/# --- Funkcja dla narzędzia Czytacz ---/,/}/d' ~/.bashrc
+sed -i '/# --- Funkcja dla narzędzia Czytacz ---/,/}/d' ~/.zshrc
 ```
 
-### 2. Usunięcie katalogu z aplikacją
-
-Usuń cały katalog, w którym znajduje się skrypt i jego wirtualne środowisko:
-
+#### 2. Usunięcie katalogu z aplikacją
 ```bash
 rm -rf ~/.local/share/czytacz
 ```
 
-### 3. Odświeżenie terminala
-
-Aby zmiany weszły w życie, otwórz nowy terminal lub odśwież bieżącą sesję poleceniem:
-
+#### 3. Odświeżenie terminala
 ```bash
-source ~/.bashrc
+source ~/.bashrc 
+# lub
+source ~/.zshrc
 ```
-
-Po wykonaniu tych trzech kroków, polecenie `czytaj` zniknie, a wszystkie pliki związane z aplikacją zostaną usunięte. Jedyną potencjalną pozostałością może być program `mpg123`, jeśli nie był wcześniej zainstalowany. Możesz go usunąć poleceniem `sudo apt-get remove mpg123`.

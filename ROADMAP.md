@@ -39,7 +39,15 @@ This document outlines the development plan for the `Czytacz` tool.
 - [x] **Basic Text Cleaning**:
     - [x] Added a function to clean the text from common problematic characters (special quotes, dashes, etc.) before processing.
 
-## Future Ideas (v0.4 and beyond)
+## Done (v0.4)
+
+- [x] **Installer & Uninstaller**:
+    - [x] Created a universal `install.sh` script to automate the setup process.
+    - [x] Created an `uninstall.sh` script for easy and clean removal of the tool.
+- [x] **Dependency Management**:
+    - [x] Created a `requirements.txt` file for cleaner Python dependency installation.
+
+## Future Ideas (v0.5 and beyond)
 
 - [ ] **Support for multiple TTS engines**:
     - Allow choosing different text-to-speech services (e.g., ElevenLabs, or other local ones).
