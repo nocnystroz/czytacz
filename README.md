@@ -65,6 +65,16 @@ After these steps, the `man speak` command should work correctly.
 
 ---
 
+## Important Note on Jina AI Reader Service
+
+The `Speaker` tool utilizes the `r.jina.ai` service provided by Jina AI for fetching and parsing web page content.
+
+*   **Usage of `r.jina.ai` is subject to Jina AI's own Terms of Service.**
+*   Users are responsible for reviewing and complying with these terms, especially concerning any limitations on commercial use, rate limits, or data privacy.
+*   The `Speaker` project's GPLv3 license covers only the `Speaker` software itself, not the Jina AI service or its terms. Your use of the Jina AI service is independent of the `Speaker` software's license.
+
+---
+
 ## License
 
 This project is licensed under the **GNU General Public License v3 (GPLv3)**. See the `LICENSE` file for full details.

@@ -1,3 +1,9 @@
+IMPORTANT NOTE REGARDING JINA AI READER SERVICE:
+
+This software (Speaker) utilizes the `r.jina.ai` service provided by Jina AI for fetching and parsing web page content. While this software is licensed under the GNU General Public License v3 (GPLv3), your use of the `r.jina.ai` service is subject to Jina AI's own Terms of Service. You are responsible for reviewing and complying with those terms, especially concerning any limitations on commercial use, rate limits, or data privacy.
+
+---
+
 GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
