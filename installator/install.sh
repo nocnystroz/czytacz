@@ -153,7 +153,7 @@ if [ "$RUN_AS_ROOT" = true ]; then
     mandb
     echo "Man page for 'speak' installed."
 else
-    echo "Man page requires root privileges to install to system directories. Please install it manually if desired:"
+    echo "Man page installation requires root privileges to install to system directories. Please install it manually if desired:"
     printf "${YELLOW}sudo cp $REPO_DIR/speak.1.gz /usr/local/share/man/man1/\\n${NC}"
     printf "${YELLOW}sudo mandb\\n${NC}"
 fi
