@@ -22,30 +22,180 @@ JINA_READER_URL = "https://r.jina.ai/"
 
 # --- LLM Logic (Summarization) ---
 
-def _call_gemini(text: str, api_key: str) -> str | None:
-    """Sends a request to the Google Gemini API."""
-    print("Attempting to use Gemini for summarization...")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+def _call_gemini(text: str, api_key: str, model: str, target_lang: str | None = None) -> str | None:
+    """Sends a request to the Google Gemini API for a specific model.
+    If `target_lang` is provided, request that the summary be translated into that language
+    as part of the same operation (single-step summarize+translate).
+    """
+    print(f"Attempting to use Gemini for summarization (model: {model})...")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
-    prompt = f"Summarize the following text in polish in a maximum of 5-7 sentences. Focus on the most important information. Text to summarize:\n\n{text}"
+    if target_lang:
+        prompt = (f"Summarize the following text and translate the summary into {target_lang}. "
+                  f"Keep the summary concise (5-7 sentences) and focus on the most important information. Text:\n\n{text}")
+    else:
+        prompt = (f"Summarize the following text in a maximum of 5-7 sentences. "
+                  f"Focus on the most important information and reply in the same language as the input. Text to summarize:\n\n{text}")
     data = {"contents": [{"parts": [{"text": prompt}]}]}
 
     try:
         response = requests.post(url, headers=headers, json=data, timeout=45)
-        response.raise_for_status()
+        # If non-2xx, surface response body for debugging
+        if response.status_code != 200:
+            print(f"Gemini API returned {response.status_code}: {response.text}", file=sys.stderr)
+            return None
         result = response.json()
-        summary = result["candidates"][0]["content"]["parts"][0]["text"]
-        return summary.strip()
+        # Safely navigate the returned JSON structure
+        summary = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        return summary.strip() if summary else None
+    except requests.RequestException as e:
+        # Print request errors and response text if available
+        try:
+            print(f"Gemini (summarize) request error: {e} - response: {e.response.text}", file=sys.stderr)
+        except Exception:
+            print(f"Gemini (summarize) request error: {e}", file=sys.stderr)
+        return None
     except Exception as e:
         print(f"Gemini (summarize) error: {e}", file=sys.stderr)
         return None
 
-def _call_openai(text: str, api_key: str, model: str) -> str | None:
-    """Sends a request to the OpenAI API."""
+# --- LLM session cache helpers (per-TTY) ---
+def _get_tty_id() -> str | None:
+    """Return the TTY id like 'pts/2' for the current session, or None if unavailable."""
+    try:
+        tty = os.ttyname(sys.stdin.fileno())
+        return os.path.basename(tty)  # 'pts/2'
+    except Exception:
+        return None
+
+
+def _get_llm_cache_path() -> str | None:
+    """Return a per-tty LLM cache filepath or None if no tty is available."""
+    tty_id = _get_tty_id()
+    if not tty_id:
+        return None
+    runtime_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
+    uid = os.getuid()
+    safe_tty = tty_id.replace('/', '_')  # make filesystem-friendly
+    return os.path.join(runtime_dir, f"speaker_llm_{uid}_{safe_tty}")
+
+
+def _read_llm_cache() -> tuple | None:
+    """Read cached 'provider:model' from per-tty cache. Returns (provider, model) or None."""
+    path = _get_llm_cache_path()
+    if not path or not os.path.exists(path):
+        return None
+    # Ensure TTY still exists; if not, remove stale cache
+    tty_id = _get_tty_id()
+    if not tty_id or not os.path.exists(f"/dev/{tty_id}"):
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        return None
+    try:
+        with open(path, "r") as f:
+            val = f.read().strip()
+            if ':' in val:
+                provider, model = val.split(':', 1)
+                return provider, model
+            return None
+    except Exception:
+        return None
+
+
+def _write_llm_cache(provider: str, model: str):
+    path = _get_llm_cache_path()
+    if not path:
+        return
+    try:
+        with open(path, "w") as f:
+            f.write(f"{provider}:{model}")
+    except Exception:
+        pass
+
+
+def _call_openai(text: str, api_key: str, model: str, target_lang: str | None = None) -> str | None:
+    """Sends a request to the OpenAI Chat Completions endpoint to summarize text.
+    If `target_lang` is provided, instruct the model to translate the summary into that language
+    as part of the same operation.
+    """
     print(f"Attempting to use OpenAI ({model}) for summarization...")
-    # Placeholder for OpenAI logic
-    print("OpenAI logic is not yet implemented.", file=sys.stderr)
-    return None
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    if target_lang:
+        system_prompt = f"You are a helpful assistant that summarizes text concisely in 5-7 sentences and returns the summary translated into {target_lang}. Reply with the translation only."
+    else:
+        system_prompt = "You are a helpful assistant that summarizes text concisely in 5-7 sentences and reply in the same language as the user's input."
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": text}
+    ]
+    data = {"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 500}
+
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=45)
+        if response.status_code != 200:
+            print(f"OpenAI API returned {response.status_code}: {response.text}", file=sys.stderr)
+            return None
+        result = response.json()
+        # Chat completions v1 response: choices[0].message.content
+        summary = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return summary.strip() if summary else None
+    except requests.RequestException as e:
+        print(f"OpenAI request error: {e}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"OpenAI error: {e}", file=sys.stderr)
+        return None
+
+
+def _translate_openai(text: str, api_key: str, model: str, target_lang: str) -> str | None:
+    """Translate text using OpenAI Chat Completions."""
+    print(f"Attempting to use OpenAI ({model}) for translation to {target_lang}...")
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    messages = [
+        {"role": "system", "content": f"You are a helpful translator. Translate the user's text into {target_lang} and reply with the translation only."},
+        {"role": "user", "content": text}
+    ]
+    data = {"model": model, "messages": messages, "temperature": 0.0, "max_tokens": 2000}
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=45)
+        if response.status_code != 200:
+            print(f"OpenAI API returned {response.status_code}: {response.text}", file=sys.stderr)
+            return None
+        result = response.json()
+        translation = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return translation.strip() if translation else None
+    except Exception as e:
+        print(f"OpenAI translation error: {e}", file=sys.stderr)
+        return None
+
+
+def _translate_gemini(text: str, api_key: str, model: str, target_lang: str) -> str | None:
+    """Translate text using Gemini by sending a translation prompt."""
+    print(f"Attempting to use Gemini ({model}) for translation to {target_lang}...")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    prompt = f"Translate the following text into {target_lang}. Reply with the translation only. Text:\n\n{text}"
+    data = {"contents": [{"parts": [{"text": prompt}]}]}
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=45)
+        if response.status_code != 200:
+            print(f"Gemini API returned {response.status_code}: {response.text}", file=sys.stderr)
+            return None
+        result = response.json()
+        translation = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        return translation.strip() if translation else None
+    except Exception as e:
+        print(f"Gemini translation error: {e}", file=sys.stderr)
+        return None
+
 
 def _call_deepseek(text: str, api_key: str, model: str) -> str | None:
     """Sends a request to the DeepSeek API."""
@@ -61,21 +211,108 @@ def _call_ollama(text: str, base_url: str, model: str) -> str | None:
     print("Ollama logic is not yet implemented.", file=sys.stderr)
     return None
 
-def summarize_text(text: str) -> str | None:
-    """Summarizes text using LLM providers according to the fallback order."""
+def summarize_text(text: str, target_lang: str | None = None) -> str | None:
+    """Summarizes text using LLM providers according to the fallback order.
+    If `target_lang` is set, request that the summary be produced in that language (single-step summarize+translate).
+    """
     fallback_order = os.getenv("LLM_FALLBACK_ORDER", "gemini,openai").split(',')
     
+    # First, attempt cached provider:model if present
+    cached = _read_llm_cache()
+    if cached:
+        cached_provider, cached_model = cached
+        if cached_provider in fallback_order:
+            print(f"Trying cached LLM: {cached_provider} (model: {cached_model})")
+            if cached_provider == "gemini":
+                api_key = os.getenv("GEMINI_API_KEY")
+                if api_key and api_key != "Your_Gemini_API_Key":
+                    summary = _call_gemini(text, api_key, cached_model, target_lang)
+                    if summary:
+                        _write_llm_cache(cached_provider, cached_model)
+                        print(f"Summary generated by: {cached_provider} (model: {cached_model})")
+                        return summary
+            elif cached_provider == "openai":
+                api_key = os.getenv("OPENAI_API_KEY")
+                if api_key and api_key != "Your_OpenAI_API_Key":
+                    summary = _call_openai(text, api_key, cached_model, target_lang)
+                    if summary:
+                        _write_llm_cache(cached_provider, cached_model)
+                        print(f"Summary generated by: {cached_provider} (model: {cached_model})")
+                        return summary
+            elif cached_provider == "deepseek":
+                api_key = os.getenv("DEEPSEEK_API_KEY")
+                if api_key and api_key != "Your_DeepSeek_API_Key":
+                    summary = _call_deepseek(text, api_key, cached_model)
+                    if summary:
+                        _write_llm_cache(cached_provider, cached_model)
+                        print(f"Summary generated by: {cached_provider} (model: {cached_model})")
+                        return summary
+            elif cached_provider == "ollama":
+                base = os.getenv("OLLAMA_BASE_URL")
+                if base:
+                    summary = _call_ollama(text, base, cached_model)
+                    if summary:
+                        _write_llm_cache(cached_provider, cached_model)
+                        print(f"Summary generated by: {cached_provider} (model: {cached_model})")
+                        return summary
+
+    # No usable cache or cached attempt failed: iterate providers and provider model lists
     for provider in fallback_order:
         summary = None
         if provider == "gemini":
             api_key = os.getenv("GEMINI_API_KEY")
             if api_key and api_key != "Your_Gemini_API_Key":
-                summary = _call_gemini(text, api_key)
+                models_env = os.getenv("GEMINI_MODELS")
+                if models_env:
+                    models = [m.strip() for m in models_env.split(',') if m.strip()]
+                else:
+                    single = os.getenv("GEMINI_MODEL", "gemini-pro")
+                    models = [m.strip() for m in single.split(',') if m.strip()]
+
+                for model in models:
+                    print(f"Trying Gemini model: {model}")
+                    summary = _call_gemini(text, api_key, model, target_lang)
+                    if summary:
+                        _write_llm_cache("gemini", model)
+                        print(f"Summary generated by: gemini (model: {model})")
+                        return summary
+
         elif provider == "openai":
             api_key = os.getenv("OPENAI_API_KEY")
-            model = os.getenv("OPENAI_MODEL", "gpt-4o")
             if api_key and api_key != "Your_OpenAI_API_Key":
-                summary = _call_openai(text, api_key, model)
+                models = [m.strip() for m in os.getenv("OPENAI_MODEL", "gpt-4o").split(',') if m.strip()]
+                for model in models:
+                    print(f"Trying OpenAI model: {model}")
+                    summary = _call_openai(text, api_key, model, target_lang)
+                    if summary:
+                        _write_llm_cache("openai", model)
+                        print(f"Summary generated by: openai (model: {model})")
+                        return summary
+
+        elif provider == "deepseek":
+            api_key = os.getenv("DEEPSEEK_API_KEY")
+            if api_key and api_key != "Your_DeepSeek_API_Key":
+                models = [m.strip() for m in os.getenv("DEEPSEEK_MODEL", "deepseek-chat").split(',') if m.strip()]
+                for model in models:
+                    print(f"Trying DeepSeek model: {model}")
+                    summary = _call_deepseek(text, api_key, model)
+                    if summary:
+                        _write_llm_cache("deepseek", model)
+                        print(f"Summary generated by: deepseek (model: {model})")
+                        return summary
+
+        elif provider == "ollama":
+            base = os.getenv("OLLAMA_BASE_URL")
+            if base:
+                models = [m.strip() for m in os.getenv("OLLAMA_MODEL", "").split(',') if m.strip()]
+                for model in models:
+                    print(f"Trying Ollama model: {model}")
+                    summary = _call_ollama(text, base, model)
+                    if summary:
+                        _write_llm_cache("ollama", model)
+                        print(f"Summary generated by: ollama (model: {model})")
+                        return summary
+
         # ... (other providers)
 
         if summary:
@@ -83,6 +320,61 @@ def summarize_text(text: str) -> str | None:
             return summary
             
     print("Failed to get summary from any configured LLM.", file=sys.stderr)
+    return None
+
+
+def translate_text(text: str, target_lang: str) -> str | None:
+    """Translates text to target_lang using available LLM providers.
+    Tries cached provider:model first, then falls back to provider model lists.
+    """
+    fallback_order = os.getenv("LLM_FALLBACK_ORDER", "gemini,openai").split(',')
+
+    # Try cached provider:model first
+    cached = _read_llm_cache()
+    if cached:
+        provider, model = cached
+        print(f"Trying cached LLM for translation: {provider} (model: {model})")
+        if provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key and api_key != "Your_OpenAI_API_Key":
+                trans = _translate_openai(text, api_key, model, target_lang)
+                if trans:
+                    return trans
+        elif provider == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key and api_key != "Your_Gemini_API_Key":
+                trans = _translate_gemini(text, api_key, model, target_lang)
+                if trans:
+                    return trans
+
+    # No cache or failed: iterate providers
+    for provider in fallback_order:
+        if provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key and api_key != "Your_OpenAI_API_Key":
+                models = [m.strip() for m in os.getenv("OPENAI_MODEL", "gpt-4o").split(',') if m.strip()]
+                for model in models:
+                    print(f"Trying OpenAI model for translation: {model}")
+                    trans = _translate_openai(text, api_key, model, target_lang)
+                    if trans:
+                        _write_llm_cache("openai", model)
+                        return trans
+        elif provider == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key and api_key != "Your_Gemini_API_Key":
+                models_env = os.getenv("GEMINI_MODELS")
+                if models_env:
+                    models = [m.strip() for m in models_env.split(',') if m.strip()]
+                else:
+                    single = os.getenv("GEMINI_MODEL", "gemini-pro")
+                    models = [m.strip() for m in single.split(',') if m.strip()]
+                for model in models:
+                    print(f"Trying Gemini model for translation: {model}")
+                    trans = _translate_gemini(text, api_key, model, target_lang)
+                    if trans:
+                        _write_llm_cache("gemini", model)
+                        return trans
+    print(f"Translation to {target_lang} failed on all configured LLMs.", file=sys.stderr)
     return None
 
 # --- Content Processing ---
@@ -238,6 +530,11 @@ def main():
         help="Activates text summarization before reading it aloud using an LLM.",
     )
     parser.add_argument(
+        "-t", "--translate",
+        action="store_true",
+        help="After summarization, translate the summary to the language set in TRANSLATE_TO_LANG in .env.",
+    )
+    parser.add_argument(
         "text_parts",
         nargs='+',
         type=str,
@@ -259,7 +556,10 @@ def main():
 
     if args.summarize:
         print("Summarization mode activated.")
-        summary = summarize_text(cleaned_content)
+        target_lang = None
+        if args.translate:
+            target_lang = os.getenv("TRANSLATE_TO_LANG", "en")
+        summary = summarize_text(cleaned_content, target_lang)
         if summary:
             # The summary might also need cleaning
             read_aloud(clean_text(summary))
