@@ -15,6 +15,17 @@ It also has an optional feature to summarize long texts using a configured Large
 - Simple installation and shell integration with the `speak` command.
 - Includes installer and uninstaller scripts for easy management.
 
+## Supported Linux Distributions
+
+Speaker works on most popular Linux distributions with the following package managers:
+
+- **Debian/Ubuntu/Mint** (apt-get)
+- **Fedora/RHEL 8+** (dnf)
+- **CentOS/RHEL 7** (yum)
+- **Arch/Manjaro** (pacman)
+
+The installer automatically detects your package manager and installs required dependencies (`mpg123`).
+
 ## Installation
 
 The main and recommended installation method is to use the included `install.sh` script.
