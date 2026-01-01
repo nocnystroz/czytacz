@@ -34,6 +34,23 @@ czytaj https://example.com
 czytaj --summarize https://długi-artykuł.com
 ```
 
+## Instalacja Strony Podręcznika (`man czytaj`)
+
+Aby móc korzystać z pomocy systemowej `man czytaj`, należy zainstalować dołączony plik strony podręcznika. Plik `czytaj.1.gz` znajduje się w tym repozytorium.
+
+1.  **Skopiuj plik `czytaj.1.gz` do katalogu systemowego:**
+    ```bash
+    sudo cp czytaj.1.gz /usr/local/share/man/man1/
+    ```
+    *Uwaga: Polecenie `cp` automatycznie nadpisze starą wersję pliku, jeśli już istnieje. Nie trzeba jej wcześniej usuwać.*
+
+2.  **Zaktualizuj bazę danych stron podręcznika:**
+    ```bash
+    sudo mandb
+    ```
+
+Po wykonaniu tych kroków polecenie `man czytaj` powinno działać poprawnie.
+
 ---
 
 ## Deinstalacja (Jak całkowicie usunąć narzędzie)
